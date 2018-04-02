@@ -3,39 +3,11 @@
 # Parsing/filtering output with https://stedolan.github.io/jq/
 # Live test at https://jqplay.org/
 
-# E.g.
-#curl https://api-ratp.pierre-grimaud.fr/v3/schedules/bus/47/convention+++fontainebleau/R 2>/dev/null
-#{
-#    "result": {
-#        "schedules": [
-#            {
-#                "message": "22 mn",
-#                "destination": "Gare de l'Est"
-#            },
-#            {
-#                "message": "42 mn",
-#                "destination": "Gare de l'Est"
-#            }
-#        ]
-#    },
-#    "_metadata": {
-#        "call": "GET /schedules/bus/47/convention+++fontainebleau/R",
-#        "date": "2018-03-24T22:37:57+01:00",
-#        "version": 3
-#    }
 
-#curl https://api-ratp.pierre-grimaud.fr/v3/schedules/bus/47/convention+++fontainebleau/R 2>/dev/null | jq '.result.schedules[0:2]  | .[0].message,.[0].destination,.[1].message,.[1].destination'
-#"29 mn"
-#"Gare de l'Est"
-#"49 mn"
-#"Gare de l'Est"
-
-function printTable()
-{
+function printTable(){
     local -r delimiter="${1}"
     local -r data="$(removeEmptyLines "${2}")"
 
-    echo $data
     if [[ "${delimiter}" != '' && "$(isEmptyString "${data}")" = 'false' ]]
     then
         local -r numberOfLines="$(wc -l <<< "${data}")"
@@ -81,23 +53,22 @@ function printTable()
                 fi
             done
 
+            # Add the '-' symbols
             if [[ "$(isEmptyString "${table}")" = 'false' ]]
             then
-                echo -e "${table}" | column -s '#' -t | awk '/^\+/{gsub(" ", "-", $0)}1'
+                echo -e "${table}" | column -s '#' -t | sed -r -e '/\ *\+.*/s/\ /-/g' -e 's/^[^\+]*\+/\ \ \+/'
             fi
         fi
     fi
 }
 
-function removeEmptyLines()
-{
+function removeEmptyLines(){
     local -r content="${1}"
 
     echo -e "${content}" | sed '/^\s*$/d'
 }
 
-function repeatString()
-{
+function repeatString(){
     local -r string="${1}"
     local -r numberToRepeat="${2}"
 
@@ -108,8 +79,7 @@ function repeatString()
     fi
 }
 
-function isEmptyString()
-{
+function isEmptyString(){
     local -r string="${1}"
 
     if [[ "$(trimString "${string}")" = '' ]]
@@ -120,8 +90,7 @@ function isEmptyString()
     echo 'false' && return 1
 }
 
-function trimString()
-{
+function trimString(){
     local -r string="${1}"
 
     sed 's,^[[:blank:]]*,,' <<< "${string}" | sed 's,[[:blank:]]*$,,'
@@ -132,10 +101,20 @@ function get_json()
     curl "$1" 2> /dev/null | jq '.result.schedules[0:2]'
 }
 
-function get_timecolumn()
-{
-    
+function get_timecolumn(){
+    local data_metro=$(get_json $url_metro)
+    local data_bus=$(get_json $url_bus)
 
+    
+    title_bus="Bus 47 - Convention Fontainebleau"
+    title_metro="Metro 7 - Kremlin-Bicetre"
+    times_first=$(echo $data_metro $data_bus|jq '.[0].message'|tr -d '"'|tr '\n' ','|sed -r 's/(,[^,]*),$/\1/')
+    times_second=$(echo $data_metro $data_bus|jq '.[1].message'|tr -d '"'|tr '\n' ','|sed -r 's/(,[^,]*),$/\1/')
+
+    data_table="${title_metro},${title_bus}\n"
+    data_table="${data_table}${times_first}\n${times_second}"
+
+    printTable ',' "$data_table"
 }
 
 function get_and_parse()
@@ -143,20 +122,22 @@ function get_and_parse()
     curl "$1" 2> /dev/null | jq '.result.schedules[0:2]  | .[0].message,.[0].destination,.[1].message,.[1].destination'
 }
 
-url_bus="https://api-ratp.pierre-grimaud.fr/v3/schedules/bus/47/convention+++fontainebleau/R"
+url_bus="https://api-ratp.pierre-grimaud.fr/v3/schedules/bus/47/convention+fontainebleau/R"
 title_bus="Bus 47 - Convention Fontainebleau"
+title_bus_italie="Bus 47 - Place d'Italie"
 
 url_metro="https://api-ratp.pierre-grimaud.fr/v3/schedules/metros/7/le+kremlin+bicetre/R"
 title_metro="Metro 7 - Kremlin-Bicetre"
 
 ## Bus line 47
 data_bus=$(get_json $url_bus)
-
 ## Metro line 7
 data_metro=$(get_json $url_metro)
 #date
 echo ""
-date
+echo "  "$(date)
+
+get_timecolumn
 
 sleep 10
 
